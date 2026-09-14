@@ -6,6 +6,7 @@
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QStandardItemModel>
 #include <QtTest>
 #include <memory>
 
@@ -1597,7 +1598,7 @@ private Q_SLOTS:
         QCOMPARE(snakeBar->implicitHeight(), 112.0);
     }
 
-    void iconRenderingMatchesFabPath_data() {
+    void iconRenderingUsesCurvePath_data() {
         QTest::addColumn<int>("size");
 
         QTest::newRow("18") << 18;
@@ -1605,7 +1606,7 @@ private Q_SLOTS:
         QTest::newRow("24") << 24;
     }
 
-    void iconRenderingMatchesFabPath() {
+    void iconRenderingUsesCurvePath() {
         QFETCH(int, size);
 
         const auto source = QStringLiteral(R"(
@@ -1641,7 +1642,87 @@ private Q_SLOTS:
         QCOMPARE(font.pixelSize(), size);
         QCOMPARE(text->property("lineHeight").toReal(), qreal(font.pixelSize()));
         QCOMPARE(text->scale(), 1.0);
-        QVERIFY(text->property("renderType").toInt() != curveRenderingType(m_engine));
+        QCOMPARE(text->property("renderType").toInt(), curveRenderingType(m_engine));
+    }
+
+    void iconKeepsCurveConfigurationUnderParentScale_data() {
+        QTest::addColumn<qreal>("parentScale");
+
+        QTest::newRow("zoom-out-small") << 0.3;
+        QTest::newRow("zoom-out") << 0.5;
+        QTest::newRow("zoom-in-small") << 1.5;
+        QTest::newRow("zoom-in") << 2.0;
+        QTest::newRow("zoom-in-large") << 3.0;
+    }
+
+    void iconKeepsCurveConfigurationUnderParentScale() {
+        QFETCH(qreal, parentScale);
+
+        const auto source = QByteArrayLiteral(R"(
+            import QtQuick
+            import Qcm.Material as MD
+
+            Item {
+                id: host
+                MD.Icon {
+                    name: MD.Token.icon.content_copy
+                    size: 20
+                }
+            }
+        )");
+
+        QQmlComponent component(&m_engine);
+        component.setData(source, QUrl(QStringLiteral("qrc:/tests/icon-parent-scale.qml")));
+        QVERIFY2(! component.isError(), qPrintable(component.errorString()));
+
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto* host = qobject_cast<QQuickItem*>(object.get());
+        QVERIFY(host);
+        host->setScale(parentScale);
+        host->setParentItem(m_window.contentItem());
+        settle(host);
+
+        auto* icon = itemWithIcon(host);
+        QVERIFY(icon);
+        QCOMPARE(icon->property("size").toInt(), 20);
+
+        auto* text = innerTextItem(icon);
+        QVERIFY(text);
+        const auto font = qvariant_cast<QFont>(text->property("font"));
+        QCOMPARE(font.pixelSize(), 20);
+        QCOMPARE(text->property("lineHeight").toReal(), qreal(font.pixelSize()));
+        QCOMPARE(text->scale(), 1.0);
+        QCOMPARE(text->property("renderType").toInt(), curveRenderingType(m_engine));
+    }
+
+    void iconRenderTypeCanBeOverridden() {
+        const auto source = QByteArrayLiteral(R"(
+            import QtQuick
+            import Qcm.Material as MD
+
+            MD.Icon {
+                property int expectedRenderType: Text.QtRendering
+                name: MD.Token.icon.content_copy
+                renderType: Text.QtRendering
+            }
+        )");
+
+        QQmlComponent component(&m_engine);
+        component.setData(source, QUrl(QStringLiteral("qrc:/tests/icon-render-type.qml")));
+        QVERIFY2(! component.isError(), qPrintable(component.errorString()));
+
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto* icon = qobject_cast<QQuickItem*>(object.get());
+        QVERIFY(icon);
+
+        const int expectedRenderType = icon->property("expectedRenderType").toInt();
+        QCOMPARE(icon->property("renderType").toInt(), expectedRenderType);
+
+        auto* text = innerTextItem(icon);
+        QVERIFY(text);
+        QCOMPARE(text->property("renderType").toInt(), expectedRenderType);
     }
 
     void iconButtonContentIconSize() {
@@ -1679,6 +1760,174 @@ private Q_SLOTS:
         auto* icon = itemWithIcon(content);
         QVERIFY(icon);
         QCOMPARE(icon->property("size").toInt(), qRound(iconSize));
+    }
+
+    void carouselSupportsCompactEmbedding() {
+        const auto source = QByteArrayLiteral(R"(
+            import QtQuick
+            import Qcm.Material as MD
+
+            MD.Carousel {
+                property bool expanded: true
+                minimumViewportHeight: expanded ? 120 : 72
+                wheelNavigationEnabled: false
+                model: 2
+                delegate: Item {}
+            }
+        )");
+
+        QQmlComponent component(&m_engine);
+        component.setData(source, QUrl(QStringLiteral("qrc:/tests/carousel-compact.qml")));
+        QVERIFY2(! component.isError(), qPrintable(component.errorString()));
+
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto* carousel = qobject_cast<QQuickItem*>(object.get());
+        QVERIFY(carousel);
+        carousel->setParentItem(m_window.contentItem());
+        settle(carousel);
+
+        QCOMPARE(carousel->property("minimumViewportHeight").toReal(), 120.0);
+        QCOMPARE(carousel->property("wheelNavigationEnabled").toBool(), false);
+        QCOMPARE(carousel->implicitHeight(), 120.0);
+
+        carousel->setProperty("expanded", false);
+        settle(carousel);
+        QCOMPARE(carousel->implicitHeight(), 72.0);
+        QCOMPARE(carousel->height(), 72.0);
+    }
+
+    void carouselItemUsesCornerRadiusOverride() {
+        const auto source = QByteArrayLiteral(R"(
+            import QtQuick
+            import Qcm.Material as MD
+
+            MD.CarouselItem {
+                property bool masked: false
+                index: 0
+                width: 72
+                height: 72
+                cornerRadius: 12
+                maskEnd: masked ? 0.75 : 0
+            }
+        )");
+
+        QQmlComponent component(&m_engine);
+        component.setData(source, QUrl(QStringLiteral("qrc:/tests/carousel-item-corner.qml")));
+        QVERIFY2(! component.isError(), qPrintable(component.errorString()));
+
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        QCOMPARE(object->property("effectiveCornerRadius").toReal(), 12.0);
+
+        object->setProperty("masked", true);
+        settle(qobject_cast<QQuickItem*>(object.get()));
+        QCOMPARE(object->property("effectiveCornerRadius").toReal(), 9.0);
+    }
+
+    void carouselAcceptsQmlVarItemModel() {
+        QStandardItemModel model(1, 1);
+        model.setData(model.index(0, 0), QStringLiteral("Wallpaper"));
+
+        const auto source = QByteArrayLiteral(R"(
+            pragma ComponentBehavior: Bound
+            import QtQuick
+            import Qcm.Material as MD
+
+            Item {
+                id: root
+                required property var suppliedModel
+                property int delegateCount: 0
+                width: 96
+                height: 72
+
+                MD.Carousel {
+                    anchors.fill: parent
+                    model: parent.suppliedModel
+                    itemExtent: 72
+                    minimumViewportHeight: 72
+                    delegate: Item {
+                        required property int index
+                        required property var model
+                        Component.onCompleted: root.delegateCount += 1
+                    }
+                }
+            }
+        )");
+
+        QQmlComponent component(&m_engine);
+        component.setData(source, QUrl(QStringLiteral("qrc:/tests/carousel-var-model.qml")));
+        QVERIFY2(! component.isError(), qPrintable(component.errorString()));
+
+        std::unique_ptr<QObject> object(component.createWithInitialProperties(
+            { { QStringLiteral("suppliedModel"), QVariant::fromValue(&model) } }));
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto* root = qobject_cast<QQuickItem*>(object.get());
+        QVERIFY(root);
+        root->setParentItem(m_window.contentItem());
+        settle(root);
+
+        QObject* view = nullptr;
+        for (auto* child : root->findChildren<QObject*>()) {
+            if (child->property("contentWidth").isValid()
+                && child->property("currentIndex").isValid()
+                && child->property("itemExtent").isValid()) {
+                view = child;
+                break;
+            }
+        }
+        QVERIFY(view);
+        QCOMPARE(view->property("count").toInt(), 1);
+        QCOMPARE(root->property("delegateCount").toInt(), 1);
+    }
+
+    void carouselLayoutDoesNotRewriteDelegateModel() {
+        const auto source = QByteArrayLiteral(R"(
+            pragma ComponentBehavior: Bound
+            import QtQuick
+            import Qcm.Material as MD
+
+            Item {
+                id: root
+                width: 480
+                height: 160
+                property int modelChangeCount: 0
+
+                MD.Carousel {
+                    id: carousel
+                    objectName: "carousel"
+                    anchors.fill: parent
+                    layout: MD.Enum.CarouselHero
+                    model: [{}, {}, {}]
+                    delegate: Item {
+                        required property int index
+                        required property var model
+                        property real itemAspectRatio: 1.5
+                        onModelChanged: root.modelChangeCount += 1
+                    }
+                }
+            }
+        )");
+
+        QQmlComponent component(&m_engine);
+        component.setData(source, QUrl(QStringLiteral("qrc:/tests/carousel-model-lifecycle.qml")));
+        QVERIFY2(! component.isError(), qPrintable(component.errorString()));
+
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto* root = qobject_cast<QQuickItem*>(object.get());
+        QVERIFY(root);
+        root->setParentItem(m_window.contentItem());
+        settle(root);
+
+        auto* carousel = root->findChild<QQuickItem*>(QStringLiteral("carousel"));
+        QVERIFY(carousel);
+        const int initialModelChangeCount = root->property("modelChangeCount").toInt();
+        QVERIFY(initialModelChangeCount > 0);
+
+        carousel->setProperty("itemExtent", carousel->property("itemExtent").toReal() + 1);
+        settle(root);
+        QCOMPARE(root->property("modelChangeCount").toInt(), initialModelChangeCount);
     }
 
 private:

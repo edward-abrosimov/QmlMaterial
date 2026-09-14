@@ -95,6 +95,15 @@ target_link_libraries(model_data_changed PRIVATE Qt6::Core Qt6::Gui Qt6::GuiPriv
 set_target_properties(model_data_changed PROPERTIES AUTOMOC ON)
 add_test(NAME model_data_changed COMMAND model_data_changed)
 
+add_executable(model_current_item
+  model_current_item.cpp
+  ${CAROUSEL_ENGINE_SOURCES}
+  ${CAROUSEL_ENGINE_HEADERS})
+target_include_directories(model_current_item PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(model_current_item PRIVATE Qt6::Core Qt6::Gui Qt6::GuiPrivate Qt6::Qml Qt6::Quick Qt6::QuickPrivate)
+set_target_properties(model_current_item PROPERTIES AUTOMOC ON)
+add_test(NAME model_current_item COMMAND model_current_item)
+
 add_executable(qm_grab qm_grab.cpp)
 target_link_libraries(qm_grab PRIVATE Qt6::Core Qt6::Gui Qt6::GuiPrivate Qt6::Quick Qt6::Qml)
 set_target_properties(qm_grab PROPERTIES AUTOMOC ON)
@@ -164,6 +173,18 @@ add_test(NAME dynamic_creation COMMAND dynamic_creation)
 set_tests_properties(dynamic_creation PROPERTIES
   RUN_SERIAL ON
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QML_IMPORT_PATH=${QT_QML_OUTPUT_DIRECTORY}")
+
+add_executable(page_layout page_layout.cpp)
+target_include_directories(page_layout PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(page_layout PRIVATE qml_material qml_material_layouts Qt6::Test Qt6::Quick)
+add_dependencies(page_layout qml_materialplugin qml_material_layoutsplugin)
+if(QML_MATERIAL_BUILD_TYPE MATCHES STATIC)
+  target_link_libraries(page_layout PRIVATE qml_materialplugin qml_material_layoutsplugin)
+endif()
+set_target_properties(page_layout PROPERTIES AUTOMOC ON)
+qt_import_qml_plugins(page_layout)
+add_test(NAME page_layout COMMAND page_layout)
+set_tests_properties(page_layout PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QML_IMPORT_PATH=${QT_QML_OUTPUT_DIRECTORY}")
 
 set(VISUAL_SCENES button action_progress elevation shape ripple ripple_phases loading_indicator_shapes tooltip wave_progress snackbar
     icon_artifacts
