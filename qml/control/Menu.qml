@@ -100,7 +100,7 @@ T.Menu {
     Instantiator {
         id: m_instantiator
         active: control.contentDelegate !== null
-        model: control.model
+        model: control.contentDelegate ? control.model : null
 
         onObjectAdded: (index, object) => control.insertItem(index, object)
         onObjectRemoved: (index, object) => control.removeItem(object)
