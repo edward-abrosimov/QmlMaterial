@@ -3,13 +3,7 @@ import Qcm.Material as MD
 
 MD.MStateImpl {
     id: root
-
-    Binding {
-        target: root
-        property: "target"
-        when: root?.item ?? false
-        value: root.item
-    }
+    target: root?.item ?? null
 
     Binding {
         target: root

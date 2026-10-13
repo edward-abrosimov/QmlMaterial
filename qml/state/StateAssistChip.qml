@@ -9,11 +9,12 @@ MD.MState {
    
 
     property bool elevated: false
-    property color iconColor: ctx.color.primary
+    readonly property bool hasCtx: ctx !== null
+    property color iconColor: hasCtx ? ctx.color.primary : "transparent"
     elevation: elevated ? MD.Token.elevation.level1 : MD.Token.elevation.level0
-    textColor: ctx.color.on_surface
-    outlineColor: ctx.color.outline_variant
-    backgroundColor: elevated ? ctx.color.surface_container_low : 'transparent'
+    textColor: hasCtx ? ctx.color.on_surface : "transparent"
+    outlineColor: hasCtx ? ctx.color.outline_variant : "transparent"
+    backgroundColor: elevated && hasCtx ? ctx.color.surface_container_low : "transparent"
 
     state: MD.Util.stateText(item.enabled, item.down, item.hovered, item.visualFocus)
 
